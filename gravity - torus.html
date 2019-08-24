@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+
+<html>
+    <body>
+        <canvas id = "myCanvas" width = "1400" height = "700" style = "border: 1px solid #000"></canvas>
+        <p id = "pos"></p>
+    </body>
+</html>
+
+<script>
+    //--------------------------------------- init
+
+var particles = [];
+
+
+//---------------------------------------- user creation
+var mouseDownID = -1;
+numberOfParticles = 0;
+var mousePos;
+var startPos;
+var endPos;
+
+
+function mousedown(event){
+    var canvas = document.getElementById("myCanvas");
+    var rect = canvas.getBoundingClientRect();
+    startPos = {x: event.x - rect.x, y: event.y - rect.y};
+}
+
+function generateColour(){
+    var red = 100 + Math.floor(155 * Math.random());
+    var green = 100 + Math.floor(155 * Math.random());
+    var blue = 100 + Math.floor(155 * Math.random());
+
+    return "rgb(".concat(red.toString(),",",green.toString(),",",blue.toString(),")");
+}
+function mouseup(event){
+    var canvas = document.getElementById("myCanvas");
+    var rect = canvas.getBoundingClientRect();
+    endPos = {x: event.x - rect.x, y: event.y - rect.y};
+    particles.push({xPos: startPos.x, yPos: startPos.y, xVel: (endPos.x - startPos.x)/200, yVel: (endPos.y - startPos.y)/200, 
+        xAcc: 0, yAcc: 0, mass: 9, colour: generateColour()});
+    numberOfParticles = numberOfParticles + 1;
+}
+
+document.addEventListener("mousedown", mousedown);
+document.addEventListener("mouseup", mouseup);
+
+//------------------------------------- drawing
+function fillBackground(){
+    c = document.getElementById("myCanvas");
+    ctx = c.getContext("2d");
+    ctx.fillStyle = "black";
+    ctx.fillRect(0,0,c.width,c.height);
+}
+
+function drawCircle(x,y,r, colour){
+    var c = document.getElementById("myCanvas");
+    var ctx = c.getContext("2d");
+    ctx.beginPath();
+    ctx.strokeStyle = colour
+    ctx.arc(x,y,r,0,2 * Math.PI);
+    ctx.stroke();
+}
+
+function clearCanvas(){
+    var c = document.getElementById("myCanvas");
+    var ctx = c.getContext("2d");
+    ctx.clearRect(0,0,c.width,c.height);
+}
+
+function drawParticle(particle){
+    drawCircle(particle.xPos, particle.yPos, Math.pow(particle.mass,0.5), particle.colour);
+}
+function drawParticles(){
+    particles.forEach(drawParticle);
+}
+
+function mainLoop(){
+    clearCanvas();
+    fillBackground();
+    chopAll();
+    updateAll();
+    drawParticles();
+}
+setInterval(mainLoop, 20);
+
+//---------------------------------------------- updating
+function accelerationContribution(i,j){
+    if(i.xPos == j.xPos && i.yPos == j.yPos){
+        return {x: 0, y: 0};
+    }
+    else {
+        c = document.getElementById("myCanvas");
+        var xDisp = j.xPos - i.xPos;
+        var yDisp = j.yPos - i.yPos;
+        var xDispTorus = [xDisp - c.width, xDisp, xDisp + c.width];
+        var yDispTorus = [yDisp - c.height, yDisp, yDisp + c.height];
+        xDisp = getSmallestModulus(xDispTorus);
+        yDisp = getSmallestModulus(yDispTorus);
+        var r = Math.pow(Math.pow(xDisp,2) + Math.pow(yDisp,2),0.5);
+        var xAcc = 3 * j.mass * (xDisp) / (Math.pow(r,3));
+        var yAcc = 3 * j.mass * (yDisp) / (Math.pow(r,3));
+        return {x: xAcc, y: yAcc};
+    }
+}
+
+function getSmallestModulus(L){
+    var winner = 0;
+    var winnerAbs = Math.abs(L[winner]);
+    for(i = 0; i < L.length; i++){
+        if(Math.abs(L[i]) < winnerAbs){
+            winner = i;
+            winnerAbs = Math.abs(L[winner]);
+        }
+    }
+    return L[winner];
+}
+function updateAccelerationOfParticle(i){
+    var acc = {x: 0, y: 0};
+    function addContribution(j){
+        var contribution = accelerationContribution(i,j);
+        acc.x = acc.x + contribution.x;
+        acc.y = acc.y + contribution.y;
+    }
+    particles.forEach(addContribution);
+    i.xAcc = acc.x;
+    i.yAcc = acc.y;
+}
+
+function updateAccelerationAll(){
+    particles.forEach(updateAccelerationOfParticle);
+}
+
+function updateVelOfParticle(part){
+    part.xVel = part.xVel + part.xAcc;
+    part.yVel = part.yVel + part.yAcc;
+}
+
+function updateVelAll(){
+    particles.forEach(updateVelOfParticle);
+}
+
+function updatePosOfParticle(part){
+    part.xPos = part.xPos + part.xVel;
+    part.yPos = part.yPos + part.yVel;
+}
+
+function updatePosAll(){
+    particles.forEach(updatePosOfParticle);
+}
+
+function torusParticle(part){
+    var c = document.getElementById("myCanvas");
+    if(part.xPos < 0){
+        part.xPos = c.width;
+    }
+    else if(part.xPos > c.width){
+        part.xPos = 0;
+    }
+    if(part.yPos < 0){
+        part.yPos = c.height;
+    }
+    else if(part.yPos > c.height){
+        part.yPos = 0;
+    }
+}
+function torusAll(){
+    particles.forEach(torusParticle);
+}
+
+function updateAll(){
+    updateAccelerationAll();
+    updateVelAll();
+    updatePosAll();
+    torusAll();
+}
+
+//----------------------------------------------------- merge
+
+function areTouching(i,j){
+    xDisp = i.xPos - j.xPos;
+    yDisp = i.yPos - j.yPos;
+    if(Math.pow(Math.pow(xDisp,2) + Math.pow(yDisp,2),0.5) < Math.pow(i.mass,0.5) + Math.pow(j.mass,0.5)){
+        return true;
+    }
+}
+
+function forTheChop(){
+    var chop = [];
+    for(i = 0; i < numberOfParticles - 1; i++){
+        for(j = i + 1; j < numberOfParticles; j++){
+            if(areTouching(particles[i],particles[j])){
+                chop.push(i);
+                particles[j].xVel = (particles[i].mass * particles[i].xVel + particles[j].mass*particles[j].xVel)
+                /(particles[i].mass + particles[j].mass);
+                particles[j].yVel = (particles[i].mass * particles[i].yVel + particles[j].mass*particles[j].yVel)
+                /(particles[i].mass + particles[j].mass);
+                particles[j].xPos = (particles[i].xPos * particles[i].mass + particles[j].xPos * particles[j].mass)
+                /(particles[i].mass + particles[j].mass);
+                particles[j].yPos = (particles[i].yPos * particles[i].mass + particles[j].yPos * particles[j].mass)
+                /(particles[i].mass + particles[j].mass);
+                particles[j].mass = particles[i].mass + particles[j].mass;
+                
+            }
+        }
+    }
+    return chop;
+}
+
+function chopAll(){
+    var newParticles = [];
+    chop = forTheChop();
+    for(i = 0; i < numberOfParticles; i++){
+        if(! chop.includes(i)){
+            newParticles.push(particles[i]);
+        }
+    }
+    particles = newParticles;
+    numberOfParticles = numberOfParticles - chop.length;
+    
+}
+
+</script>
